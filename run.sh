@@ -1,0 +1,1 @@
+sudo $(which python3) deploy.py
