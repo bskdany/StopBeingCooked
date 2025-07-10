@@ -16,15 +16,17 @@ def calculate_app_time(df, timeout_minutes=APP_TIME_SESSION_TIMEOUT):
     
     df = df.sort_values('Start Time')
     
-    app_times = {}
+    app_stats = {}
     timeout = timedelta(minutes=timeout_minutes)
     
     for ip, group in df.groupby('Source IP'):
         current_start = None
         last_activity = None
         total_time = timedelta()
+        total_size = 0
         
         for _, row in group.iterrows():
+            total_size += row['Total Size']
             if current_start is None:
                 current_start = row['Start Time']
                 last_activity = row['End Time']
@@ -36,9 +38,13 @@ def calculate_app_time(df, timeout_minutes=APP_TIME_SESSION_TIMEOUT):
         
         if current_start is not None:
             total_time += last_activity - current_start
-        app_times[ip] = round(total_time.total_seconds() / 60, 2)
+        
+        app_stats[ip] = {
+            'minutes': round(total_time.total_seconds() / 60, 2),
+            'mb': round(total_size / (1024 * 1024), 2)
+        }
     
-    return app_times
+    return app_stats
 
 def monitor_app_time(update_interval=APP_TIME_UPDATE_INTERVAL):
     last_times = {}
@@ -46,21 +52,24 @@ def monitor_app_time(update_interval=APP_TIME_UPDATE_INTERVAL):
     while True:
         try:
             df = pd.read_csv(UDP_LOG_FILE)
-            current_times = calculate_app_time(df)
+            current_stats = calculate_app_time(df)
             
             print("\033[H\033[J")
             print(f"App Usage Times")
             print("-" * 60)
             
-            for ip, minutes in sorted(current_times.items(), key=lambda x: x[1], reverse=True):
-                if minutes > 0:
+            # Sort by time spent
+            for ip, stats in sorted(current_stats.items(), key=lambda x: x[1]['minutes'], reverse=True):
+                if stats['minutes'] > 0:
                     domain = whois(ip) or ip
+                    minutes = stats['minutes']
                     hours = int(minutes // 60)
                     mins = int(minutes % 60)
                     time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
-                    print(f"{domain} ({ip}): {time_str}")
+                    mb_str = f"{stats['mb']:.1f}MB"
+                    print(f"{domain} ({ip}): {time_str} | {mb_str}")
             
-            last_times = current_times
+            last_times = current_stats
             time.sleep(update_interval)
             
         except KeyboardInterrupt:
