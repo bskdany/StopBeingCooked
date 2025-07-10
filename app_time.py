@@ -2,10 +2,18 @@ import pandas as pd
 from datetime import datetime, timedelta
 import time
 from whois import whois
+from config import *
 
-def calculate_app_time(df, timeout_minutes=5):
+def calculate_app_time(df, timeout_minutes=APP_TIME_SESSION_TIMEOUT):
+    # Convert timestamps to datetime
     df['Start Time'] = pd.to_datetime(df['Start Time'], unit='s')
     df['End Time'] = pd.to_datetime(df['End Time'], unit='s')
+    
+    # Filter for today only - from midnight to now
+    today_start = pd.Timestamp.now().normalize()  # midnight
+    today_end = pd.Timestamp.now()
+    df = df[(df['Start Time'] >= today_start) & (df['Start Time'] <= today_end)]
+    
     df = df.sort_values('Start Time')
     
     app_times = {}
@@ -32,27 +40,25 @@ def calculate_app_time(df, timeout_minutes=5):
     
     return app_times
 
-def monitor_app_time(update_interval=1):
+def monitor_app_time(update_interval=APP_TIME_UPDATE_INTERVAL):
     last_times = {}
     
     while True:
         try:
-            df = pd.read_csv("traffic_logs/udp_aggregated.csv")
+            df = pd.read_csv(UDP_LOG_FILE)
             current_times = calculate_app_time(df)
             
             print("\033[H\033[J")
-            print("App Usage Times (Updated Real-time):")
+            print(f"App Usage Times")
             print("-" * 60)
             
             for ip, minutes in sorted(current_times.items(), key=lambda x: x[1], reverse=True):
                 if minutes > 0:
                     domain = whois(ip) or ip
-                    change = ""
-                    if ip in last_times:
-                        diff = minutes - last_times[ip]
-                        if diff > 0:
-                            change = f" (+{diff:.1f}m)"
-                    print(f"{domain} ({ip}): {minutes:.1f}m{change}")
+                    hours = int(minutes // 60)
+                    mins = int(minutes % 60)
+                    time_str = f"{hours}h {mins}m" if hours > 0 else f"{mins}m"
+                    print(f"{domain} ({ip}): {time_str}")
             
             last_times = current_times
             time.sleep(update_interval)

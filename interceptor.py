@@ -5,31 +5,32 @@ import threading
 import sys
 import os
 from whois import tag_ip
+from config import *
 
 PACKET_SIZE_TRESHOLD = 100 # requests with less than this amount of packest are not saved
 
 # Generate unique timestamp for this recording session
-udp_log_file = f"./traffic_logs/udp_aggregated.csv"
-tcp_log_file = f"./traffic_logs/tcp_aggregated.csv"
-dns_log_file = f"./traffic_logs/dns.csv"
+# udp_log_file = f"./traffic_logs/udp_aggregated.csv"
+# tcp_log_file = f"./traffic_logs/tcp_aggregated.csv"
+# dns_log_file = f"./traffic_logs/dns.csv"
 
-if(not os.path.isfile(udp_log_file)):
-    with open(udp_log_file, mode="w", newline='') as file:
+if(not os.path.isfile(UDP_LOG_FILE)):
+    with open(UDP_LOG_FILE, mode="w", newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Start Time", "End Time", "Source IP", "Destination Port", "Total Size", "Total Packets"])
 
-if(not os.path.isfile(tcp_log_file)):
-    with open(udp_log_file, mode="w", newline='') as file:
+if(not os.path.isfile(TCP_LOG_FILE)):
+    with open(TCP_LOG_FILE, mode="w", newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Start Time", "End Time", "Source IP", "Destination Port", "Total Size", "Total Packets"])
 
-if(not os.path.isfile(dns_log_file)):
-    with open(dns_log_file, mode="w", newline='') as file:
+if(not os.path.isfile(DNS_LOG_FILE)):
+    with open(DNS_LOG_FILE, mode="w", newline='') as file:
         writer = csv.writer(file)
         writer.writerow(["Timestamp", "Domain Name", "IP Address"])
 
 class PacketDictionary:
-    def __init__(self, output_file, timeout = 0.1):
+    def __init__(self, output_file, timeout = UDP_TIMEOUT):
         self.data = dict()
         self.timers = dict()
         self.timeout = timeout
@@ -73,7 +74,7 @@ def packet_get_addr_data(packet):
         src, dst = None, None
     return src, dst
 
-seen_udp_packets = PacketDictionary(udp_log_file, timeout=0.1)
+seen_udp_packets = PacketDictionary(UDP_LOG_FILE)
 
 def packet_callback(packet):
     if packet.haslayer(DNS):
@@ -88,7 +89,7 @@ def packet_callback(packet):
 
     if packet.haslayer(UDP):
         src_ip, dst_ip = packet_get_addr_data(packet)
-        if src_ip.startswith("192"):
+        if IGNORE_LOCAL_IPS and src_ip and src_ip.startswith("192"):
             return
 
         timestamp = packet.time
@@ -104,7 +105,7 @@ def packet_callback(packet):
 def intercept_traffic():
     print("Intercepting...")
     try:
-        sniff(iface="br0", lfilter=lambda pkt: pkt[Ether].src != Ether().src, prn=packet_callback, store=False)
+        sniff(iface=INTERFACE_NAME, lfilter=lambda pkt: pkt[Ether].src != Ether().src, prn=packet_callback, store=False)
     except Exception as e:
         intercept_traffic()
     
