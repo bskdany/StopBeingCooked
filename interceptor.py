@@ -9,6 +9,9 @@ from whois import tag_ip
 from config import *
 from logger import logger
 
+def packet_size_to_kb(packet_size):
+    return round(packet_size / 1024, 1)
+
 
 # this class is used to aggregate UDP packets into requests based:
 # - minimum packet size to be considered a request
@@ -35,7 +38,13 @@ class PacketDictionary:
             response_data = self.data.pop(key)
             if(response_data[3] >= PACKET_SIZE_THRESHOLD):
                 self.save_udp_packet(response_data, key)
-                logger.info(f"UDP packet from ip {key[0]} port {key[1]} to ip {key[2]} port {key[3]}, size {response_data[2]}")
+
+                # check whether the source is in the wireguard client subnet
+                if(key[0].startswith("10.66.66.")):
+                    logger.info(f"UDP stream | {key[0]}:{key[1]} -> {key[2]}:{key[3]} | {packet_size_to_kb(response_data[2])}kb")
+                else:
+                    logger.info(f"UDP stream | {key[2]}:{key[3]} <- {key[0]}:{key[1]} | {packet_size_to_kb(response_data[2])}kb")
+
             timer = self.timers.pop(key, None)
             if timer:
                 timer.cancel()

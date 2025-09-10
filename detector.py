@@ -35,9 +35,6 @@ def analyse_window_instagram(df):
             return True
     return False
 
-
-
-
 def detect_doomscrolling():
     last_doomscroll_time = 0
     while True:
