@@ -1,4 +1,5 @@
 from scapy.all import sniff, IP, IPv6, Ether, TCP, UDP, wrpcap, DNS, DNSQR, DNSRR
+import sqlite3
 import csv
 from datetime import datetime
 import threading
@@ -6,16 +7,18 @@ import sys
 import os
 from whois import tag_ip
 from config import *
-import logging
-logger = logging.getLogger(__name__)
+from logger import logger
 
+
+# this class is used to aggregate UDP packets into requests based:
+# - minimum packet size to be considered a request
+# - time threshold, which when exceeded dictates the end of the request
 class PacketDictionary:
-    def __init__(self, output_file, timeout = UDP_TIMEOUT):
+    def __init__(self, timeout = UDP_TIMEOUT):
         self.data = dict()
         self.timers = dict()
         self.timeout = timeout
         self.lock = threading.Lock()
-        self.output_file = output_file
     
     def set(self, key, value):
         with self.lock:
@@ -31,15 +34,30 @@ class PacketDictionary:
         with self.lock:
             response_data = self.data.pop(key)
             if(response_data[3] >= PACKET_SIZE_THRESHOLD):
-                with open(self.output_file, mode="a", newline='') as file:
-                    writer = csv.writer(file)
-                    writer.writerow([response_data[0], response_data[1], key[0], key[1], key[2], key[3], response_data[2], response_data[3]])
-                    logger.info(f"UDP packet from ip {key[0]} port {key[1]} to ip {key[2]} port {key[3]}, size {response_data[2]}")
-
-
+                self.save_udp_packet(response_data, key)
+                logger.info(f"UDP packet from ip {key[0]} port {key[1]} to ip {key[2]} port {key[3]}, size {response_data[2]}")
             timer = self.timers.pop(key, None)
             if timer:
                 timer.cancel()
+
+    def save_udp_packet(self, response_data, key):
+        conn = sqlite3.connect('traffic.db')
+        cursor = conn.cursor()
+        cursor.execute('''
+            INSERT INTO udp (start_time, end_time, source_ip, source_port, destination_ip, destination_port, total_size, total_packets)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            response_data[0],  # start_time
+            response_data[1],  # end_time
+            key[0],            # source_ip
+            key[1],            # source_port
+            key[2],            # destination_ip
+            key[3],            # destination_port
+            response_data[2],  # total_size
+            response_data[3]   # total_packets
+        ))
+        conn.commit()
+        conn.close()
 
     def get(self, key):
         with self.lock:
@@ -56,11 +74,13 @@ def packet_get_addr_data(packet):
         src, dst = None, None
     return src, dst
 
-seen_udp_packets = PacketDictionary(UDP_LOG_FILE)
+seen_udp_packets = PacketDictionary()
 
 def packet_callback(packet):
     if packet.haslayer(DNS):
         dns_layer = packet[DNS]
+        print("GOT DNS")
+        print(dns_layer)
         if dns_layer.qr == 1:  # DNS Response
             if dns_layer.haslayer(DNSRR):
                 for answer in dns_layer.an:
@@ -68,11 +88,10 @@ def packet_callback(packet):
                         domain_name = answer.rrname.decode()
                         ip_address = answer.rdata
                         tag_ip(ip_address, domain_name) 
+                        logger.info(f"Tagged ip {ip_address} with domain {domain_name}")
 
     if packet.haslayer(UDP):
         src_ip, dst_ip = packet_get_addr_data(packet)
-        if IGNORE_LOCAL_IPS and src_ip and src_ip.startswith("192"):
-            return
 
         timestamp = packet.time
         dst_port = packet[UDP].dport
@@ -88,7 +107,7 @@ def packet_callback(packet):
 def intercept_traffic():
     logger.info("Intercepting...")
     try:
-        sniff(iface=INTERFACE_NAME, lfilter=lambda pkt: pkt[Ether].src != Ether().src, prn=packet_callback, store=False)
+        sniff(iface=INTERFACE_NAME, prn=packet_callback, store=False)
     except Exception as e:
         logger.error(f"Error: {e}")
         intercept_traffic()

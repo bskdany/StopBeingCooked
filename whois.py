@@ -1,31 +1,25 @@
 import csv
 from datetime import datetime
 import pandas as pd
-
-DNS_LOG_FILE = "traffic_logs/dns.csv"
-_domain_cache = {}
+from config import *
+import sqlite3
 
 def tag_ip(ip, domain):
-    with open(DNS_LOG_FILE, mode="a", newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow([datetime.now().timestamp(), domain, ip])
-    _domain_cache[ip] = domain
+    conn = sqlite3.connect('traffic.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        INSERT INTO dns (timestamp, domain_name, ip_address)
+        VALUES (?, ?, ?)
+    ''', (datetime.now().timestamp(), domain, ip))
+    conn.commit()
+    conn.close()
     
 def whois(ip):
-    if ip in _domain_cache:
-        return _domain_cache[ip]
-        
-    try:
-        df = pd.read_csv(DNS_LOG_FILE)
-        df = df[df['IP Address'] == ip]
-        if df.empty:
-            _domain_cache[ip] = None
-            return None
-        else:
-            domain = df.iloc[0]['Domain Name']
-            _domain_cache[ip] = domain
-            return domain
-    except Exception as e:
-        _domain_cache[ip] = None
-        return None
-    
+    conn = sqlite3.connect('traffic.db')
+    cursor = conn.cursor()
+    cursor.execute('''
+        SELECT domain_name FROM dns WHERE ip_address = ?
+    ''', (ip,))
+    domain = cursor.fetchone()
+    conn.close()
+    return domain
