@@ -58,3 +58,4 @@ sudo iptables -S FORWARD
 ```
 sudo iptables -D FORWARD -s 76.10.130.224/32 -j DROP
 ```
+git config --global commit.gpgSign true
