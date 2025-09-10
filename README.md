@@ -3,7 +3,7 @@
 StopBeingCooked is a system that blocks Instagram Reels and other Short Form Video content, it works on any device with theoretically any app.
 
 ## The Setup
-Create a VPN Server on a Linux device using [wg-easy](https://github.com/wg-easy/wg-easy).
+Create a VPN Server on a Linux device using [wireguard-install](https://github.com/angristan/wireguard-install).
 
 Install the wiregurad-vpn app on your client device and connect to the server.
 
