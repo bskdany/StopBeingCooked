@@ -7,28 +7,6 @@ import os
 from whois import tag_ip
 from config import *
 
-PACKET_SIZE_TRESHOLD = 100 # requests with less than this amount of packest are not saved
-
-# Generate unique timestamp for this recording session
-# udp_log_file = f"./traffic_logs/udp_aggregated.csv"
-# tcp_log_file = f"./traffic_logs/tcp_aggregated.csv"
-# dns_log_file = f"./traffic_logs/dns.csv"
-
-if(not os.path.isfile(UDP_LOG_FILE)):
-    with open(UDP_LOG_FILE, mode="w", newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Start Time", "End Time", "Source IP", "Destination Port", "Total Size", "Total Packets"])
-
-if(not os.path.isfile(TCP_LOG_FILE)):
-    with open(TCP_LOG_FILE, mode="w", newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Start Time", "End Time", "Source IP", "Destination Port", "Total Size", "Total Packets"])
-
-if(not os.path.isfile(DNS_LOG_FILE)):
-    with open(DNS_LOG_FILE, mode="w", newline='') as file:
-        writer = csv.writer(file)
-        writer.writerow(["Timestamp", "Domain Name", "IP Address"])
-
 class PacketDictionary:
     def __init__(self, output_file, timeout = UDP_TIMEOUT):
         self.data = dict()
@@ -50,7 +28,7 @@ class PacketDictionary:
     def remove(self, key):
         with self.lock:
             response_data = self.data.pop(key)
-            if(response_data[3] >= PACKET_SIZE_TRESHOLD):
+            if(response_data[3] >= PACKET_SIZE_THRESHOLD):
                 with open(self.output_file, mode="a", newline='') as file:
                     writer = csv.writer(file)
                     writer.writerow([response_data[0], response_data[1], key[0], key[1], response_data[2], response_data[3]])
@@ -107,6 +85,7 @@ def intercept_traffic():
     try:
         sniff(iface=INTERFACE_NAME, lfilter=lambda pkt: pkt[Ether].src != Ether().src, prn=packet_callback, store=False)
     except Exception as e:
+        print(f"Error: {e}")
         intercept_traffic()
     
 if __name__ == "__main__":

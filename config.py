@@ -1,6 +1,6 @@
 # Network configs
 PACKET_SIZE_THRESHOLD = 10  # requests with less than this amount of packets are not saved
-INTERFACE_NAME = "br0"  # network interface to monitor
+INTERFACE_NAME = "eth0"  # network interface to monitor
 UDP_TIMEOUT = 0.1  # timeout for UDP packet aggregation
 
 # File paths

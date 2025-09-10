@@ -7,11 +7,6 @@ Create a VPN Server on a Linux device using [wireguard-install](https://github.c
 
 Install the wiregurad-vpn app on your client device and connect to the server.
 
-Clone this repo, then run 
-```
-pipenv install
-```
-
 ## Running the app 
 An admin password will be requested
 ```
