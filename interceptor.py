@@ -6,6 +6,8 @@ import sys
 import os
 from whois import tag_ip
 from config import *
+import logging
+logger = logging.getLogger(__name__)
 
 class PacketDictionary:
     def __init__(self, output_file, timeout = UDP_TIMEOUT):
@@ -31,7 +33,9 @@ class PacketDictionary:
             if(response_data[3] >= PACKET_SIZE_THRESHOLD):
                 with open(self.output_file, mode="a", newline='') as file:
                     writer = csv.writer(file)
-                    writer.writerow([response_data[0], response_data[1], key[0], key[1], response_data[2], response_data[3]])
+                    writer.writerow([response_data[0], response_data[1], key[0], key[1], key[2], key[3], response_data[2], response_data[3]])
+                    logger.info(f"UDP packet from ip {key[0]} port {key[1]} to ip {key[2]} port {key[3]}, size {response_data[2]}")
+
 
             timer = self.timers.pop(key, None)
             if timer:
@@ -72,7 +76,8 @@ def packet_callback(packet):
 
         timestamp = packet.time
         dst_port = packet[UDP].dport
-        key = (src_ip, dst_port)
+        source_port = packet[UDP].sport
+        key = (src_ip, source_port, dst_ip, dst_port)
         prev_data = seen_udp_packets.get(key)
         if prev_data:
             start_time, _, total_size, total_packets = prev_data
@@ -81,16 +86,16 @@ def packet_callback(packet):
             seen_udp_packets.set(key, [timestamp, timestamp, len(packet), 1])
 
 def intercept_traffic():
-    print("Intercepting...")
+    logger.info("Intercepting...")
     try:
         sniff(iface=INTERFACE_NAME, lfilter=lambda pkt: pkt[Ether].src != Ether().src, prn=packet_callback, store=False)
     except Exception as e:
-        print(f"Error: {e}")
+        logger.error(f"Error: {e}")
         intercept_traffic()
     
 if __name__ == "__main__":
     try:
         intercept_traffic()
     except Exception as e:
-        print("Crashed, restarting")
+        logger.error("Crashed, restarting")
         intercept_traffic()

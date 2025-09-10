@@ -4,9 +4,7 @@ from firewall import blacklist_ip_thread, get_blacklist
 from notifications import send_push_message
 from whois import whois
 from datetime import datetime
-
-ROLLING_WINDOW_SIZE_MIN = 1
-MIN_DATA_POINTS = 5
+from config import *
 
 # Create a rolling window of the IPs excluding the blacklist
 def get_rolling_window(df, start_time, end_time, blacklist):
