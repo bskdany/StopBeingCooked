@@ -39,11 +39,12 @@ class PacketDictionary:
             if(response_data[3] >= PACKET_SIZE_THRESHOLD):
                 self.save_udp_packet(response_data, key)
 
-                # check whether the source is in the wireguard client subnet
-                if(key[0].startswith("10.66.66.")):
-                    logger.info(f"UDP stream | {key[0]}:{key[1]} -> {key[2]}:{key[3]} | {packet_size_to_kb(response_data[2])}kb")
-                else:
-                    logger.info(f"UDP stream | {key[2]}:{key[3]} <- {key[0]}:{key[1]} | {packet_size_to_kb(response_data[2])}kb")
+                if(INTERCEPTOR_LOG_UDP):
+                    # check whether the source is in the wireguard client subnet
+                    if(key[0].startswith("10.66.66.")):
+                        logger.info(f"UDP stream | {key[0]}:{key[1]} -> {key[2]}:{key[3]} | {packet_size_to_kb(response_data[2])}kb")
+                    else:
+                        logger.info(f"UDP stream | {key[2]}:{key[3]} <- {key[0]}:{key[1]} | {packet_size_to_kb(response_data[2])}kb")
 
             timer = self.timers.pop(key, None)
             if timer:
@@ -88,8 +89,6 @@ seen_udp_packets = PacketDictionary()
 def packet_callback(packet):
     if packet.haslayer(DNS):
         dns_layer = packet[DNS]
-        print("GOT DNS")
-        print(dns_layer)
         if dns_layer.qr == 1:  # DNS Response
             if dns_layer.haslayer(DNSRR):
                 for answer in dns_layer.an:

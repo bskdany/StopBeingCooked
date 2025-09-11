@@ -5,27 +5,32 @@ import csv
 import threading 
 from interceptor import intercept_traffic
 from detector import detect_doomscrolling
-from app_time import monitor_app_time
+from monitor_bandwidth import monitor_bandwidth
 from sqlite import init_db
 from logger import logger
+from firewall import clean_blacklist
 
 def main():
     init_db()
 
-    traffic_interceptot_thread = threading.Thread(target=intercept_traffic, daemon=True, name="TrafficInterceptor")
-    doomscrolling_detector_thread = threading.Thread(target=detect_doomscrolling, daemon=True, name="DoomscrollingDetector")
-    # app_time_monitor_thread = threading.Thread(target=monitor_app_time, daemon=True, name="AppTimeMonitor")
+    traffic_interceptor_thread = threading.Thread(target=intercept_traffic, daemon=True, name="TrafficInterceptor")
 
-    traffic_interceptot_thread.start()
-    doomscrolling_detector_thread.start()
+    if(DOOMSCROLLIG_CHECK_ENABLE):
+        doomscrolling_detector_thread = threading.Thread(target=detect_doomscrolling, daemon=True, name="DoomscrollingDetector")
+        doomscrolling_detector_thread.start()
+
+    if(MONITOR_BANDWIDTH):
+        bandwidth_monitor_thread = threading.Thread(target=monitor_bandwidth, daemon=True, name="BandwidthMonitor")
+        bandwidth_monitor_thread.start()
+
+    traffic_interceptor_thread.start()
+
     try:
         while True:
             threading.Event().wait()
     except KeyboardInterrupt:
         logger.info("Shuttind down...")
-        traffic_interceptot_thread.join()
-        doomscrolling_detector_thread.join()
-        logger.info("shut down succesful")
+        clean_blacklist()
 
 if __name__ == "__main__":
     main()

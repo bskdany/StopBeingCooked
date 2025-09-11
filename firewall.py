@@ -31,6 +31,10 @@ def blacklist_ip_thread(ip_address, duration_seconds=10):
     thread = threading.Thread(target=blacklist_ip, args=[ip_address, duration_seconds])
     thread.start()
 
+def clean_blacklist():
+    for ip_address in blacklist:
+        remove_rule(ip_address)
+
 if __name__ == "__main__":
     ip_to_limit = ""
 
