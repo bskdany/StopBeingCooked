@@ -1,45 +1,68 @@
 import subprocess
 import threading
 import time
+from logger import logger
 
-blacklist = set()
+firewall_blacklist = set()
 
-def blacklist_ip(ip_address, duration_seconds=10):
-    def add_rule():
-        if ip_address not in blacklist:
-            blacklist.add(ip_address)
-            subprocess.run(["sudo", "iptables", "-I", "FORWARD", "-s", ip_address, "-j", "DROP"])
-            print(f"Added block for incoming traffic from {ip_address}")
+def _add_rule(blacklist_key):
+    if(blacklist_key in firewall_blacklist):
+        raise Exception(f"Firewall block already exists for {blacklist_key}")
+    
+    source_ip, source_port, destination_ip, destination_port = blacklist_key
 
-    def remove_rule():
-        blacklist.remove(ip_address)
-        subprocess.run(["sudo", "iptables", "-D", "FORWARD", "-s", ip_address, "-j", "DROP"])
-        print(f"Removed block for incoming traffic from {ip_address}")
+    firewall_blacklist.add(blacklist_key)
+    subprocess.run([
+        "sudo", "iptables", "-I", "FORWARD",
+        "-s", source_ip,
+        "-d", destination_ip,
+        "-p", "udp",
+        "--sport", str(source_port),
+        "--dport", str(destination_port),
+        "-j", "DROP"
+    ])
+    logger.info(f"Added block for traffic from {source_ip}:{source_port} to {destination_ip}:{destination_port}")
+
+def _remove_rule(blacklist_key):
+    if(blacklist_key not in firewall_blacklist):
+        raise Exception(f"Firewall block does not exist for {blacklist_key}")
+    
+    source_ip, source_port, destination_ip, destination_port = blacklist_key
+
+    firewall_blacklist.remove(blacklist_key)
+    subprocess.run([
+        "sudo", "iptables", "-D", "FORWARD",
+        "-s", source_ip,
+        "-d", destination_ip,
+        "-p", "udp",
+        "--sport", str(source_port),
+        "--dport", str(destination_port),
+        "-j", "DROP"
+    ])
+    logger.info(f"Removed block for traffic from {source_ip}:{source_port} to {destination_ip}:{destination_port}")
+
+def _add_firewall_block(source_ip, source_port, destination_ip, destination_port, duration_seconds=10):
+    blacklist_key = (source_ip, source_port, destination_ip, destination_port)
 
     try:
-        add_rule()
-        timer = threading.Timer(duration_seconds, remove_rule)
+        _add_rule(blacklist_key)
+        timer = threading.Timer(duration_seconds, _remove_rule, args=[blacklist_key])
         timer.start()
 
     except subprocess.CalledProcessError as e:
-        print(f"Error blacklisting ip ${ip_address}: {e}")
+        logger.error(f"Error setting firewall rule: {e}")
     
-def get_blacklist():
-    return blacklist
+def get_firewall_blacklist():
+    return firewall_blacklist
 
-def blacklist_ip_thread(ip_address, duration_seconds=10):
-    thread = threading.Thread(target=blacklist_ip, args=[ip_address, duration_seconds])
+def add_firewall_block(source_ip, source_port, destination_ip, destination_port, duration_seconds=10):
+    thread = threading.Thread(
+        target=_add_firewall_block,
+        args=[source_ip, source_port, destination_ip, destination_port, duration_seconds]
+    )
     thread.start()
 
-def clean_blacklist():
-    for ip_address in blacklist:
-        remove_rule(ip_address)
-
-if __name__ == "__main__":
-    ip_to_limit = ""
-
-    blacklist_ip_thread(ip_to_limit)
-
-    for i in range(10):
-        print(f"Main thread: {i}")
-        time.sleep(1)
+def clear_firewall_blacklist():
+    for blacklist_key in firewall_blacklist:
+        _remove_rule(blacklist_key)
+    firewall_blacklist.clear()

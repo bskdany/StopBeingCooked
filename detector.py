@@ -1,6 +1,6 @@
 import pandas as pd
 import time
-from firewall import blacklist_ip_thread, get_blacklist
+from firewall import add_firewall_block 
 from notifications import send_push_message
 from whois import whois
 from datetime import datetime
@@ -11,53 +11,100 @@ import sqlite3
 def packet_size_to_mb(packet_size):
     return round(packet_size / (1024 * 1024), 1)
 
-def analyse_window_instagram(df):
+def analyse_window_instagram(rows):
     seen = dict()
 
-    for index, row in df.iterrows():
-        timestamp = row['Start Time']
-        src_ip = row['Source IP']
-        total_size = row['Total Size']
+    for row in rows:
+        src_ip = row[1]
+        dst_ip = row[2]
+        src_port = row[3]
+        dst_port = row[4]
 
-        if src_ip not in seen:
-            domain = whois(src_ip)
-            if domain and "instagram" in domain:
-                seen[src_ip] = [0, domain]
+        key = (src_ip, src_port, dst_ip, dst_port)
+        if key not in seen:
+            seen[key] = 0
         else:
-            seen[src_ip][0] += 1
-    
-    if(len(seen) > 0):
-        logger.info(f"Doomscrolling detected for {len(seen)} users")
+            seen[key] += 1
 
-    for ip in seen:
-        if seen[ip][0] >= DOOMSCROLLING_CHECK_MIN_DATA_POINTS: 
-            blacklist_ip_thread(ip, ROLLING_WINDOW_SIZE_MIN * 60)
+    for key in seen:
+        if (seen[key] >= DOOMSCROLLING_CHECK_MIN_DATA_POINTS):
+            src_ip, src_port, dst_ip, dst_port = key
+            add_firewall_block(src_ip, src_port, dst_ip, dst_port, DOOMSCROLLING_CHECK_ROLLING_WINDOW_SIZE)
             return True
+
     return False
 
 def detect_doomscrolling():
-    last_doomscroll_time = 0
+
+    doomscroll_history = dict()
+
     while True:
         sqlite_conn = sqlite3.connect('traffic.db')
         cursor = sqlite_conn.cursor()
 
         end_time = datetime.now().timestamp()
         # this is here so that if doomscrolling is detected for a time period, we don't check for it again
-        start_time = max(end_time - DOOMSCROLLING_CHECK_ROLLING_WINDOW_SIZE, last_doomscroll_time)
+        for user_ip, last_time in doomscroll_history.items():
+            start_time = max(end_time - DOOMSCROLLING_CHECK_ROLLING_WINDOW_SIZE, last_time)
 
+            cursor.execute('''
+                SELECT 
+                    start_time,
+                    source_ip,
+                    destination_ip,
+                    source_port,
+                    destination_port,
+                    total_size
+                FROM udp
+                WHERE start_time >= ? 
+                AND destination_ip = ?
+            ''', (start_time, user_ip))
+            rows = cursor.fetchall()
+
+            if len(rows) == 0:
+                logger.warn(f"No rows found for user {user_ip}")
+                continue
+            
+            logger.info(f"Found {len(rows)} rows for user {user_ip}")
+
+            if analyse_window_instagram(rows):
+                logger.info(f"Doomscrolling detected for user {user_ip}")
+                doomscroll_history[user_ip] = datetime.now().timestamp()
+
+        start_time = end_time - DOOMSCROLLING_CHECK_ROLLING_WINDOW_SIZE
+
+        used_ips = list(doomscroll_history.keys())
         cursor.execute('''
-            SELECT start_time as "Start Time", source_ip as "Source IP", total_size as "Total Size"
+            SELECT 
+                start_time,
+                source_ip,
+                destination_ip,
+                source_port,
+                destination_port,
+                total_size
             FROM udp
-            WHERE start_time >= ?
-        ''', (start_time,))
+            WHERE start_time >= ? 
+            AND destination_ip LIKE ?
+            AND destination_ip NOT IN ({})  
+        '''.format(','.join(['?'] * len(used_ips))), 
+        [start_time, WIREGUARD_CLIENT_SUBNET + '%'] + 
+        used_ips)
         rows = cursor.fetchall()
         sqlite_conn.close()
 
-        df = pd.DataFrame(rows, columns=["Start Time", "Source IP", "Total Size"])
-        
-        if(analyse_window_instagram(df)):
-            logger.info("Doomscrolling detected for user ")
-            send_push_message("Doomscrolling Detected")
+        ip_dataframes = {}
+        for row in rows:
+            user_ip = row[2]
+            if user_ip not in ip_dataframes:
+                ip_dataframes[user_ip] = []
+            ip_dataframes[user_ip].append(row)
+
+
+        for user_ip, user_rows in ip_dataframes.items():
+            logger.info(f"Found {len(user_rows)} rows for user {user_ip}")
+            if analyse_window_instagram(user_rows):
+                logger.info(f"Doomscrolling detected for user {user_ip}")
+                doomscroll_history[user_ip] = datetime.now().timestamp()
 
         time.sleep(DOOMSCROLLING_CHECK_UPDATE_INTERVAL)
                 

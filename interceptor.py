@@ -41,7 +41,7 @@ class PacketDictionary:
 
                 if(INTERCEPTOR_LOG_UDP):
                     # check whether the source is in the wireguard client subnet
-                    if(key[0].startswith("10.66.66.")):
+                    if(key[0].startswith(WIREGUARD_CLIENT_SUBNET)):
                         logger.info(f"UDP stream | {key[0]}:{key[1]} -> {key[2]}:{key[3]} | {packet_size_to_kb(response_data[2])}kb")
                     else:
                         logger.info(f"UDP stream | {key[2]}:{key[3]} <- {key[0]}:{key[1]} | {packet_size_to_kb(response_data[2])}kb")
@@ -96,7 +96,8 @@ def packet_callback(packet):
                         domain_name = answer.rrname.decode()
                         ip_address = answer.rdata
                         tag_ip(ip_address, domain_name) 
-                        logger.info(f"Tagged ip {ip_address} with domain {domain_name}")
+                        if(INTERCEPTOR_LOG_DNS):
+                            logger.info(f"Tagged ip {ip_address} with domain {domain_name}")
 
     if packet.haslayer(UDP):
         src_ip, dst_ip = packet_get_addr_data(packet)

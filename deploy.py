@@ -8,7 +8,7 @@ from detector import detect_doomscrolling
 from monitor_bandwidth import monitor_bandwidth
 from sqlite import init_db
 from logger import logger
-from firewall import clean_blacklist
+from firewall import clear_firewall_blacklist
 
 def main():
     init_db()
@@ -30,7 +30,7 @@ def main():
             threading.Event().wait()
     except KeyboardInterrupt:
         logger.info("Shuttind down...")
-        clean_blacklist()
+        clear_firewall_blacklist()
 
 if __name__ == "__main__":
     main()
